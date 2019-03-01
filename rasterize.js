@@ -26,6 +26,13 @@ var colorBuffers = [];
 var vertexColorAttrib;
 var vertexColorLoc;
 
+var vertexPositionAttrib;
+
+var ambientBuffers = [];
+
+var cameraPositionLoc;
+var lightPositionLoc;
+
 /* shader parameter locations */
 var vPosAttribLoc; // where to put position for vertex shader
 var mMatrixULoc; // where to put model matrix for vertex shader
@@ -35,10 +42,112 @@ var diffuseULoc; // where to put diffuse reflecivity for fragment shader
 var specularULoc; // where to put specular reflecivity for fragment shader
 var shininessULoc; // where to put specular exponent for fragment shader
 
+var normalAttribLoc;
+var viewMatrixLoc;
+
 /* interaction variables */
 var Eye = vec3.clone(defaultEye); // eye position in world space
 var Center = vec3.clone(defaultCenter); // view direction in world space
 var Up = vec3.clone(defaultUp); // view up vector in world space
+
+var state = {
+    camera: {
+        position: Eye,
+        center: Center,
+        up: Up,
+    },
+    model: {
+        position: vec3.fromValues(0.0, 0.0, 0.0),
+        rotation: mat4.create(), 
+        scale: vec3.fromValues(1.0, 1.0, 1.0),  
+    },
+    canvas: null,
+}
+
+/* MAIN -- HERE is where execution begins after window load */
+
+function main() {
+  
+    // Hook up the button
+    const fileUploadButton = document.querySelector("#fileUploadButton");
+    fileUploadButton.addEventListener("click", () => {
+        console.log("Submitting file...");
+        let fileInput  = document.getElementById('inputFile');
+        let files = fileInput.files;
+        let url = URL.createObjectURL(files[0]);
+
+        fetch(url, {
+            mode: 'no-cors' // 'cors' by default
+        }).then(res=>{
+            return res.text();
+        }).then(data => {
+            var inputTriangles = JSON.parse(data);
+
+            doDrawing(inputTriangles);
+
+        }).catch((e) => {
+            console.error(e);
+        });
+
+    });
+
+} // end main
+
+
+
+function doDrawing(inputTriangles) {
+    setupWebGL(); // set up the webGL environment
+    loadModels(inputTriangles); // load in the triangles from tri file
+    setupShaders(); // setup the webGL shaders
+    
+    var then = 0.0;
+
+    //Update function
+    function render(now) {
+        now *= 0.001;
+        const deltaTime = now - then;
+        then = now;
+        drawScene();
+        renderModels(); // draw the triangles using webGL
+        requestAnimationFrame(render);
+    }
+
+    requestAnimationFrame(render);
+
+}
+
+function drawScene(){
+    var projectionMatrix = mat4.create();
+    var fovy = 60.0 * Math.PI / 180.0; // Vertical field of view in radians
+    var aspect = state.canvas.clientWidth / state.canvas.clientHeight;
+    var near = 0.1;
+    var far = 100.0;
+
+
+    mat4.perspective(projectionMatrix, fovy, aspect, near, far);
+    gl.uniformMatrix4fv(pvmMatrixULoc, false, projectionMatrix);
+
+    var viewMatrix = mat4.create();
+        mat4.lookAt(
+            viewMatrix,
+            state.camera.position,
+            state.camera.center,
+            state.camera.up,
+        );
+
+    gl.uniformMatrix4fv(viewMatrixLoc, false, viewMatrix);
+
+    var modelMatrix = mat4.create();
+    gl.uniformMatrix4fv(mMatrixULoc, false, modelMatrix);
+       
+    // Update camera position
+    gl.uniform3fv(cameraPositionLoc, state.camera.position);
+
+    gl.uniform3fv(lightPositionLoc, lightPosition);
+    
+
+}
+
 
 // ASSIGNMENT HELPER FUNCTIONS
 
@@ -50,6 +159,7 @@ function setupWebGL() {
     // Get the canvas and context
     var canvas = document.getElementById("myWebGLCanvas"); // create a js canvas
     gl = canvas.getContext("webgl2"); // get a webgl object from it
+    state.canvas = canvas;
     
     try {
       if (gl == null) {
@@ -65,7 +175,11 @@ function setupWebGL() {
       console.log(e);
     } // end catch
  
+    
+
 } // end setupWebGL
+
+
 
 // read triangles set by set , load them into webgl buffers (one buffer per set)
 function loadModels(inputTriangles) {
@@ -78,10 +192,6 @@ function loadModels(inputTriangles) {
         var vtxToAdd; // vtx coords to add to the coord array
         var triToAdd; // tri indices to add to the index array
 
-        var colorToAdd;
-
-        console.log(inputTriangles);
-        
         
         // process each triangle set to load webgl vertex and triangle buffers
         numTriangleSets = inputTriangles.length; // remember how many tri sets
@@ -91,6 +201,8 @@ function loadModels(inputTriangles) {
             // set up the vertex and normal arrays, define model center and axes
             inputTriangles[whichSet].glVertices = []; // flat coord list for webgl
             inputTriangles[whichSet].gl_diffuses = [];
+            inputTriangles[whichSet].gl_ambients = [];
+            inputTriangles[whichSet].gl_normals = [];
 
             var numVerts = inputTriangles[whichSet].vertices.length; // num vertices in tri set
             for (whichSetVert=0; whichSetVert<numVerts; whichSetVert++) { // verts in set
@@ -98,8 +210,13 @@ function loadModels(inputTriangles) {
                 inputTriangles[whichSet].glVertices.push(vtxToAdd[0],vtxToAdd[1],vtxToAdd[2]); // put coords in set coord list
 
 
-                colorToAdd =  inputTriangles[whichSet].material.diffuse;
-                inputTriangles[whichSet].gl_diffuses.push(colorToAdd[0],colorToAdd[1], colorToAdd[2]);
+                let diffuseToAdd =  inputTriangles[whichSet].material.diffuse;
+                let ambientToAdd = inputTriangles[whichSet].material.ambient;
+                inputTriangles[whichSet].gl_diffuses.push(diffuseToAdd[0],diffuseToAdd[1], diffuseToAdd[2]);
+                inputTriangles[whichSet].gl_ambients.push(ambientToAdd[0], ambientToAdd[1], ambientToAdd[2]);
+
+                let normalToAdd = inputTriangles[whichSet].normals[whichSetVert];
+                inputTriangles[whichSet].gl_normals.push(normalToAdd[0],normalToAdd[1],normalToAdd[2]);
 
                 
             } // end for vertices in set
@@ -110,9 +227,17 @@ function loadModels(inputTriangles) {
             gl.bindBuffer(gl.ARRAY_BUFFER,vertexBuffers[whichSet]); // activate that buffer
             gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(inputTriangles[whichSet].glVertices),gl.STATIC_DRAW); // data in
 
+            ambientBuffers[whichSet] = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, ambientBuffers[whichSet]);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(inputTriangles[whichSet].gl_ambients),gl.STATIC_DRAW);
+
             colorBuffers[whichSet] = gl.createBuffer();
             gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffers[whichSet]);
             gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(inputTriangles[whichSet].gl_diffuses),gl.STATIC_DRAW);
+
+            normalBuffers[whichSet] = gl.createBuffer(); 
+            gl.bindBuffer(gl.ARRAY_BUFFER,normalBuffers[whichSet]); 
+            gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(inputTriangles[whichSet].gl_normals),gl.STATIC_DRAW); 
          
             // set up the triangle index array, adjusting indices across sets
             inputTriangles[whichSet].glTriangles = []; // flat index list for webgl
@@ -128,13 +253,10 @@ function loadModels(inputTriangles) {
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, triangleBuffers[whichSet]); // activate that buffer
             gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(inputTriangles[whichSet].glTriangles),gl.STATIC_DRAW); // data in
 
-            console.log(inputTriangles[whichSet].glVertices);
-            console.log(inputTriangles[whichSet].glTriangles);
-            console.log(inputTriangles[whichSet].gl_diffuses);
-
 
 
         } // end for each triangle set 
+
         console.log(inputTriangles);
 
     } // end if triangles found
@@ -149,27 +271,76 @@ function setupShaders() {
         precision highp float;
 
         in vec4 oColor;
+        in vec3 oNormal;
+        in vec3 oFragPosition;
+        in vec3 oCameraPosition;
+        in vec3 lightPosition;
+        in vec3 ambientOut;
+        in vec3 diffuseOut;
+        in vec3 specularOut;
+
         out vec4 FragColor;
 
         void main(void) {
-            //gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0); // all fragments are white
-            FragColor = oColor;
-            //FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+            vec3 lightDirection;
+            lightDirection = normalize(lightPosition - oFragPosition);
+
+            float diffMagnitude = max(dot(oNormal, lightDirection), 0.0);
+            vec3 diffuse = diffMagnitude * diffuseOut;
+
+            vec3 result = diffuse + oColor.rgb;
+            FragColor = vec4(result, 1.0);
+            //FragColor = oColor;
         }
     `;
     
     // define vertex shader in essl using es6 template strings
     // have in/out for vertex colors 
     var vShaderCode = `#version 300 es
-        in vec3 vertexColor;
-        in vec3 vertexPosition;
+        in vec3 vertexColor; //acolor we also think?!
+        in vec3 vertexPosition; //aPosition we think??!?!
+        in vec3 aNormal;
+        in vec3 ambientLight;
+        in vec3 diffuseLight;
+        in vec3 specularLight;
+        in float nValue;
+        in vec3 oLightPosition;
 
         out vec4 oColor;
+        out vec3 oNormal;
+        out vec3 oFragPosition;
+        out vec3 oCameraPosition;
+        out vec3 lightPosition;
+        out vec3 ambientOut;
+        out vec3 diffuseOut;
+        out vec3 specularOut;
+
+        uniform mat4 uProjectMatrix;
+        uniform mat4 uViewMatrix;
+        uniform mat4 uModelMatrix;
+        uniform vec3 uCameraPosition;
+        uniform float uLightIntensity;
 
         void main(void) {
-            oColor = vec4(vertexColor, 1.0);
+            lightPosition = oLightPosition;
+
             //oColor = vec4(0.0, 1.0, 1.0, 1.0);
-            gl_Position = vec4(vertexPosition, 1.0); // use the untransformed position
+            //gl_Position = vec4(vertexPosition, 1.0); // use the untransformed position
+            //gl_Position = uProjectionMatrix * uViewMatrix * uModelMatrix * vec4(aPosition, 1.0);
+
+            oFragPosition = (uModelMatrix * vec4(aNormal, 1.0)).xyz;
+
+            gl_Position = uModelMatrix * vec4(vertexPosition, 1.0);
+            //oColor = vec4(vertexColor + ambientLight, 1.0);
+            oColor = vec4(vertexColor, 1.0);
+            ambientOut = ambientLight;
+            diffuseOut = diffuseLight;
+            specularOut = specularLight;
+
+            oNormal = (uModelMatrix * vec4(aNormal, 1.0)).xyz;
+
+            oNormal = normalize(oNormal);
+
         }
     `;
     
@@ -199,13 +370,36 @@ function setupShaders() {
             if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) { // bad program link
                 throw "error during shader program linking: " + gl.getProgramInfoLog(shaderProgram);
             } else { // no shader program link errors
+
                 gl.useProgram(shaderProgram); // activate shader program (frag and vert)
                 vertexPositionAttrib = // get pointer to vertex shader input
                     gl.getAttribLocation(shaderProgram, "vertexPosition"); 
                 gl.enableVertexAttribArray(vertexPositionAttrib); // input to shader from array
+                
                 // set up vertexColorAttrib from vertexColor
                 vertexColorAttrib = gl.getAttribLocation(shaderProgram, "vertexColor");
                 gl.enableVertexAttribArray(vertexColorAttrib);
+
+                ambientULoc = gl.getAttribLocation(shaderProgram, 'ambientLight');
+                gl.enableVertexAttribArray(ambientULoc);
+
+                normalAttribLoc = gl.getAttribLocation(shaderProgram, 'aNormal');
+                gl.enableVertexAttribArray(normalAttribLoc);
+
+                
+                mMatrixULoc =  gl.getUniformLocation(shaderProgram, 'uModelMatrix');
+                pvmMatrixULoc = gl.getUniformLocation(shaderProgram, 'uProjectionMatrix');
+                viewMatrixLoc = gl.getUniformLocation(shaderProgram, 'uViewMatrix');
+                cameraPositionLoc = gl.getUniformLocation(shaderProgram, 'uCameraPosition');
+                lightPositionLoc = gl.getUniformLocation(shaderProgram, 'oLightPosition');
+                
+                
+
+                //shininessULoc = gl.getUniformLocation(shaderSource, 'nValue'); 
+
+                
+
+                
             } // end if no shader program link errors
         } // end if no compile errors
     } // end try 
@@ -213,6 +407,9 @@ function setupShaders() {
     catch(e) {
         console.log(e);
     } // end catch
+
+
+
 } // end setup shaders
 
 // render the loaded model
@@ -231,8 +428,14 @@ function renderModels() {
         //gl.vertexAttribPointer(vPosAttribLoc,3,gl.FLOAT,false,0,0); // feed
         gl.vertexAttribPointer(vertexPositionAttrib,3,gl.FLOAT,false,0,0); // feed
 
+        gl.bindBuffer(gl.ARRAY_BUFFER, ambientBuffers[whichTriSet]);
+        gl.vertexAttribPointer(ambientULoc,3,gl.FLOAT,false,0,0);
+
         gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffers[whichTriSet]);
         gl.vertexAttribPointer(vertexColorAttrib,3,gl.FLOAT,false,0,0);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffers[whichTriSet]);
+        gl.vertexAttribPointer(normalAttribLoc,3,gl.FLOAT,false,0,0);
         
         // triangle buffer: activate and render
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,triangleBuffers[whichTriSet]); // activate
@@ -243,38 +446,3 @@ function renderModels() {
 } // end render triangles
 
 
-function doDrawing(inputTriangles) {
-    setupWebGL(); // set up the webGL environment
-    loadModels(inputTriangles); // load in the triangles from tri file
-    setupShaders(); // setup the webGL shaders
-    renderModels(); // draw the triangles using webGL
-}
-
-/* MAIN -- HERE is where execution begins after window load */
-
-function main() {
-  
-        // Hook up the button
-        const fileUploadButton = document.querySelector("#fileUploadButton");
-        fileUploadButton.addEventListener("click", () => {
-            console.log("Submitting file...");
-            let fileInput  = document.getElementById('inputFile');
-            let files = fileInput.files;
-            let url = URL.createObjectURL(files[0]);
-    
-            fetch(url, {
-                mode: 'no-cors' // 'cors' by default
-            }).then(res=>{
-                return res.text();
-            }).then(data => {
-                var inputTriangles = JSON.parse(data);
-    
-                doDrawing(inputTriangles);
-
-            }).catch((e) => {
-                console.error(e);
-            });
-    
-        });
-  
-} // end main
