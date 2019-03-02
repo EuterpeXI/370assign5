@@ -29,6 +29,7 @@ var vertexColorLoc;
 var vertexPositionAttrib;
 
 var ambientBuffers = [];
+var shininessBuffers = [];
 
 var cameraPositionLoc;
 var lightPositionLoc;
@@ -99,6 +100,7 @@ function doDrawing(inputTriangles) {
     setupWebGL(); // set up the webGL environment
     loadModels(inputTriangles); // load in the triangles from tri file
     setupShaders(); // setup the webGL shaders
+    setupKeyPresses();
     
     var then = 0.0;
 
@@ -120,7 +122,7 @@ function drawScene(){
     var projectionMatrix = mat4.create();
     var fovy = 60.0 * Math.PI / 180.0; // Vertical field of view in radians
     var aspect = state.canvas.clientWidth / state.canvas.clientHeight;
-    var near = 0.1;
+    var near = 4.0;
     var far = 100.0;
 
 
@@ -139,13 +141,54 @@ function drawScene(){
 
     var modelMatrix = mat4.create();
     gl.uniformMatrix4fv(mMatrixULoc, false, modelMatrix);
+    mat4.rotate(modelMatrix, state.model.rotation, 0, vec3.fromValues(1.0, 0.0, 0.0));
+    mat4.scale(modelMatrix, modelMatrix, state.model.scale);
+    mat4.translate(modelMatrix, modelMatrix, state.model.position);
+    
        
     // Update camera position
     gl.uniform3fv(cameraPositionLoc, state.camera.position);
 
     gl.uniform3fv(lightPositionLoc, lightPosition);
-    
 
+}
+
+function setupKeyPresses(){
+    document.addEventListener("keydown", (event) => {
+        console.log(event.code);
+        
+        switch(event.code) {
+        case "ArrowRight":
+            vec3.add(state.model.position, state.model.position, vec3.fromValues(1.1, 0.0, 0.0));
+            break;
+        case "ArrowLeft":
+            vec3.add(state.model.position, state.model.position, vec3.fromValues(-1.1, 0.0, 0.0));
+            // TODO: Make the object move to the left
+            break;
+        case "ArrowUp":
+            mat4.rotateX(state.model.rotation, state.model.rotation, -0.2);
+            // TODO: Rotate the object around the x-axis
+            // HINT: Look at the methods for rotation here: http://glmatrix.net/docs/module-mat4.html
+            // HINT: You will need to hook up rotation in the drawScene method
+            break;
+        case "ArrowDown":
+            mat4.rotateX(state.model.rotation, state.model.rotation, 0.2);
+            // TODO: Rotate the object around the x-axis in the other direction
+            break;
+        case "Minus":
+            mat4.multiplyScalar(state.model.scale, state.model.scale, 1.5);
+            // TODO: Make the object larger by changing the scale
+            break;
+        case "Equal":
+            // Reset the state
+            state.model.position = vec3.fromValues(0.0, 0.0, 0.0);
+            state.model.rotation = mat4.create(); // Identity matrix
+            state.model.scale = vec3.fromValues(1.0, 1.0, 1.0);
+            break;
+        default:
+            break;
+        }
+    });
 }
 
 
@@ -203,6 +246,7 @@ function loadModels(inputTriangles) {
             inputTriangles[whichSet].gl_diffuses = [];
             inputTriangles[whichSet].gl_ambients = [];
             inputTriangles[whichSet].gl_normals = [];
+            inputTriangles[whichSet].gl_shineness = [];
 
             var numVerts = inputTriangles[whichSet].vertices.length; // num vertices in tri set
             for (whichSetVert=0; whichSetVert<numVerts; whichSetVert++) { // verts in set
@@ -217,6 +261,8 @@ function loadModels(inputTriangles) {
 
                 let normalToAdd = inputTriangles[whichSet].normals[whichSetVert];
                 inputTriangles[whichSet].gl_normals.push(normalToAdd[0],normalToAdd[1],normalToAdd[2]);
+
+                inputTriangles[whichSet].gl_shineness.push(inputTriangles[whichSet].material.n, inputTriangles[whichSet].material.n, inputTriangles[whichSet].material.n);
 
                 
             } // end for vertices in set
@@ -238,6 +284,10 @@ function loadModels(inputTriangles) {
             normalBuffers[whichSet] = gl.createBuffer(); 
             gl.bindBuffer(gl.ARRAY_BUFFER,normalBuffers[whichSet]); 
             gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(inputTriangles[whichSet].gl_normals),gl.STATIC_DRAW); 
+
+            shininessBuffers[whichSet] = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER,shininessBuffers[whichSet]); 
+            gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(inputTriangles[whichSet].gl_shineness),gl.STATIC_DRAW); 
          
             // set up the triangle index array, adjusting indices across sets
             inputTriangles[whichSet].glTriangles = []; // flat index list for webgl
@@ -259,6 +309,7 @@ function loadModels(inputTriangles) {
 
         console.log(inputTriangles);
 
+
     } // end if triangles found
 } // end load triangles
 
@@ -270,25 +321,38 @@ function setupShaders() {
     var fShaderCode = `#version 300 es
         precision highp float;
 
-        in vec4 oColor;
         in vec3 oNormal;
         in vec3 oFragPosition;
         in vec3 oCameraPosition;
         in vec3 lightPosition;
         in vec3 ambientOut;
-        in vec3 diffuseOut;
+        in vec4 diffuseOut;
         in vec3 specularOut;
+        in float outNValue;
+        
+        vec3 lightColor = vec3(1.0, 1.0, 1.0);
 
         out vec4 FragColor;
 
         void main(void) {
+
             vec3 lightDirection;
             lightDirection = normalize(lightPosition - oFragPosition);
-
             float diffMagnitude = max(dot(oNormal, lightDirection), 0.0);
-            vec3 diffuse = diffMagnitude * diffuseOut;
+            vec3 diffuse = diffMagnitude * lightColor;
 
-            vec3 result = diffuse + oColor.rgb;
+            //specular ks * ls (N.H)^n
+            //H = normalized(V+L)
+
+            vec3 nCameraPosition = normalize(oCameraPosition);
+            vec3 H = normalize(nCameraPosition + lightDirection);
+            float NDotH = max(dot(oNormal, H), 0.0);
+
+            float temp = pow(NDotH, outNValue);
+            vec3 specularVal = (specularOut * lightColor) * temp;
+
+
+            vec3 result = (diffuse + ambientOut + specularVal) * diffuseOut.rgb;
             FragColor = vec4(result, 1.0);
             //FragColor = oColor;
         }
@@ -297,11 +361,10 @@ function setupShaders() {
     // define vertex shader in essl using es6 template strings
     // have in/out for vertex colors 
     var vShaderCode = `#version 300 es
-        in vec3 vertexColor; //acolor we also think?!
+        in vec3 vertexColor; //diffuse color here
         in vec3 vertexPosition; //aPosition we think??!?!
         in vec3 aNormal;
         in vec3 ambientLight;
-        in vec3 diffuseLight;
         in vec3 specularLight;
         in float nValue;
         in vec3 oLightPosition;
@@ -312,8 +375,9 @@ function setupShaders() {
         out vec3 oCameraPosition;
         out vec3 lightPosition;
         out vec3 ambientOut;
-        out vec3 diffuseOut;
+        out vec4 diffuseOut;
         out vec3 specularOut;
+        out float outNValue;
 
         uniform mat4 uProjectMatrix;
         uniform mat4 uViewMatrix;
@@ -324,22 +388,19 @@ function setupShaders() {
         void main(void) {
             lightPosition = oLightPosition;
 
-            //oColor = vec4(0.0, 1.0, 1.0, 1.0);
-            //gl_Position = vec4(vertexPosition, 1.0); // use the untransformed position
-            //gl_Position = uProjectionMatrix * uViewMatrix * uModelMatrix * vec4(aPosition, 1.0);
-
             oFragPosition = (uModelMatrix * vec4(aNormal, 1.0)).xyz;
 
             gl_Position = uModelMatrix * vec4(vertexPosition, 1.0);
-            //oColor = vec4(vertexColor + ambientLight, 1.0);
-            oColor = vec4(vertexColor, 1.0);
+
+
             ambientOut = ambientLight;
-            diffuseOut = diffuseLight;
+            diffuseOut = vec4(vertexColor, 1.0);
             specularOut = specularLight;
 
             oNormal = (uModelMatrix * vec4(aNormal, 1.0)).xyz;
 
             oNormal = normalize(oNormal);
+            outNValue = nValue;
 
         }
     `;
@@ -386,16 +447,16 @@ function setupShaders() {
                 normalAttribLoc = gl.getAttribLocation(shaderProgram, 'aNormal');
                 gl.enableVertexAttribArray(normalAttribLoc);
 
+                shininessULoc = gl.getAttribLocation(shaderProgram, 'nValue');
+                gl.enableVertexAttribArray(shininessULoc);
+
                 
                 mMatrixULoc =  gl.getUniformLocation(shaderProgram, 'uModelMatrix');
                 pvmMatrixULoc = gl.getUniformLocation(shaderProgram, 'uProjectionMatrix');
                 viewMatrixLoc = gl.getUniformLocation(shaderProgram, 'uViewMatrix');
                 cameraPositionLoc = gl.getUniformLocation(shaderProgram, 'uCameraPosition');
                 lightPositionLoc = gl.getUniformLocation(shaderProgram, 'oLightPosition');
-                
-                
-
-                //shininessULoc = gl.getUniformLocation(shaderSource, 'nValue'); 
+            
 
                 
 
@@ -436,6 +497,9 @@ function renderModels() {
 
         gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffers[whichTriSet]);
         gl.vertexAttribPointer(normalAttribLoc,3,gl.FLOAT,false,0,0);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, shininessBuffers[whichTriSet]);
+        gl.vertexAttribPointer(shininessULoc,3,gl.FLOAT,false,0,0);
         
         // triangle buffer: activate and render
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,triangleBuffers[whichTriSet]); // activate
