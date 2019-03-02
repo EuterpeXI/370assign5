@@ -140,7 +140,8 @@ function drawScene(){
     gl.uniformMatrix4fv(viewMatrixLoc, false, viewMatrix);
 
     var modelMatrix = mat4.create();
-    gl.uniformMatrix4fv(mMatrixULoc, false, modelMatrix);
+
+    
     mat4.rotate(modelMatrix, state.model.rotation, 0, vec3.fromValues(1.0, 0.0, 0.0));
     mat4.scale(modelMatrix, modelMatrix, state.model.scale);
     mat4.translate(modelMatrix, modelMatrix, state.model.position);
@@ -148,7 +149,7 @@ function drawScene(){
        
     // Update camera position
     gl.uniform3fv(cameraPositionLoc, state.camera.position);
-
+    gl.uniformMatrix4fv(mMatrixULoc, false, modelMatrix);
     gl.uniform3fv(lightPositionLoc, lightPosition);
 
 }
@@ -159,20 +160,20 @@ function setupKeyPresses(){
         
         switch(event.code) {
         case "ArrowRight":
-            vec3.add(state.model.position, state.model.position, vec3.fromValues(1.1, 0.0, 0.0));
+            vec3.add(state.model.position, state.model.position, vec3.fromValues(0.1, 0.0, 0.0));
             break;
         case "ArrowLeft":
-            vec3.add(state.model.position, state.model.position, vec3.fromValues(-1.1, 0.0, 0.0));
+            vec3.add(state.model.position, state.model.position, vec3.fromValues(-0.1, 0.0, 0.0));
             // TODO: Make the object move to the left
             break;
         case "ArrowUp":
-            mat4.rotateX(state.model.rotation, state.model.rotation, -0.2);
+            mat4.rotateZ(state.model.rotation, state.model.rotation, -0.2);
             // TODO: Rotate the object around the x-axis
             // HINT: Look at the methods for rotation here: http://glmatrix.net/docs/module-mat4.html
             // HINT: You will need to hook up rotation in the drawScene method
             break;
         case "ArrowDown":
-            mat4.rotateX(state.model.rotation, state.model.rotation, 0.2);
+            mat4.rotateZ(state.model.rotation, state.model.rotation, 0.2);
             // TODO: Rotate the object around the x-axis in the other direction
             break;
         case "Minus":
@@ -388,11 +389,11 @@ function setupShaders() {
         void main(void) {
             lightPosition = oLightPosition;
 
-            oFragPosition = (uModelMatrix * vec4(aNormal, 1.0)).xyz;
+            
 
+            //gl_Position = uModelMatrix * uViewMatrix * uModelMatrix * vec4(vertexPosition, 1.0);
             gl_Position = uModelMatrix * vec4(vertexPosition, 1.0);
-
-
+            oFragPosition = (uModelMatrix * vec4(aNormal, 1.0)).xyz;
             ambientOut = ambientLight;
             diffuseOut = vec4(vertexColor, 1.0);
             specularOut = specularLight;
