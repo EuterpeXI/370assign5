@@ -22,17 +22,20 @@ var triSetSizes = []; // this contains the size of each triangle set
 var triangleBuffers = []; // lists of indices into vertexBuffers by set, in triples
 var viewDelta = 0; // how much to displace view with each key press
 
-var colorBuffers = [];
+var colorBuffers = []; // This will handle our diffuse. oColor = diffuse
 var vertexColorAttrib;
 var vertexColorLoc;
 
 var vertexPositionAttrib;
 
 var ambientBuffers = [];
+var specularBuffers = [];
 var shininessBuffers = [];
 
 var cameraPositionLoc;
 var lightPositionLoc;
+var normalAttribLoc;
+var viewMatrixLoc;
 
 /* shader parameter locations */
 var vPosAttribLoc; // where to put position for vertex shader
@@ -42,9 +45,9 @@ var ambientULoc; // where to put ambient reflecivity for fragment shader
 var diffuseULoc; // where to put diffuse reflecivity for fragment shader
 var specularULoc; // where to put specular reflecivity for fragment shader
 var shininessULoc; // where to put specular exponent for fragment shader
-
-var normalAttribLoc;
-var viewMatrixLoc;
+var laULoc; // La value
+var ldULoc; // Ld value
+var lsULoc; // Ls value
 
 /* interaction variables */
 var Eye = vec3.clone(defaultEye); // eye position in world space
@@ -147,10 +150,13 @@ function drawScene(){
     mat4.translate(modelMatrix, modelMatrix, state.model.position);
     
        
-    // Update camera position
+    // Update camera position, matrix, light position, etc...
     gl.uniform3fv(cameraPositionLoc, state.camera.position);
     gl.uniformMatrix4fv(mMatrixULoc, false, modelMatrix);
     gl.uniform3fv(lightPositionLoc, lightPosition);
+    gl.uniform3fv(laULoc, lightAmbient);
+    gl.uniform3fv(ldULoc, lightDiffuse);
+    gl.uniform3fv(lsULoc, lightSpecular);
 
 }
 
@@ -239,6 +245,7 @@ function loadModels(inputTriangles) {
         
         // process each triangle set to load webgl vertex and triangle buffers
         numTriangleSets = inputTriangles.length; // remember how many tri sets
+        
         for (var whichSet=0; whichSet<numTriangleSets; whichSet++) { // for each tri set
             //console.log(inputTriangles[whichSet].material.diffuse);
 
@@ -246,49 +253,70 @@ function loadModels(inputTriangles) {
             inputTriangles[whichSet].glVertices = []; // flat coord list for webgl
             inputTriangles[whichSet].gl_diffuses = [];
             inputTriangles[whichSet].gl_ambients = [];
+            inputTriangles[whichSet].gl_specular = [];
             inputTriangles[whichSet].gl_normals = [];
             inputTriangles[whichSet].gl_shineness = [];
 
             var numVerts = inputTriangles[whichSet].vertices.length; // num vertices in tri set
+
+            // traverse through the vertices within our current set of triangle
             for (whichSetVert=0; whichSetVert<numVerts; whichSetVert++) { // verts in set
+
+                // Grabbing vertices into our coord. list
                 vtxToAdd = inputTriangles[whichSet].vertices[whichSetVert]; // get vertex to add
                 inputTriangles[whichSet].glVertices.push(vtxToAdd[0],vtxToAdd[1],vtxToAdd[2]); // put coords in set coord list
 
-
-                let diffuseToAdd =  inputTriangles[whichSet].material.diffuse;
+                // Grabbing ambient from the json file
                 let ambientToAdd = inputTriangles[whichSet].material.ambient;
-                inputTriangles[whichSet].gl_diffuses.push(diffuseToAdd[0],diffuseToAdd[1], diffuseToAdd[2]);
                 inputTriangles[whichSet].gl_ambients.push(ambientToAdd[0], ambientToAdd[1], ambientToAdd[2]);
 
+                // Grabbing diffuse from the json file
+                let diffuseToAdd = inputTriangles[whichSet].material.diffuse;
+                inputTriangles[whichSet].gl_diffuses.push(diffuseToAdd[0], diffuseToAdd[1], diffuseToAdd[2]);
+                // Note: Diffuse will be our oColor
+
+                // Grabbing specular from the json file
+                let specularToAdd = inputTriangles[whichSet].material.specular;
+                inputTriangles[whichSet].gl_specular.push(specularToAdd[0], specularToAdd[1], specularToAdd[2]);
+
+                // Grabbing normals
                 let normalToAdd = inputTriangles[whichSet].normals[whichSetVert];
                 inputTriangles[whichSet].gl_normals.push(normalToAdd[0],normalToAdd[1],normalToAdd[2]);
 
+                // Grabbing n-value
                 inputTriangles[whichSet].gl_shineness.push(inputTriangles[whichSet].material.n, inputTriangles[whichSet].material.n, inputTriangles[whichSet].material.n);
 
                 
             } // end for vertices in set
           
             //console.log(inputTriangles);
+
             // send the vertex coords and normals to webGL
             vertexBuffers[whichSet] = gl.createBuffer(); // init empty webgl set vertex coord buffer
             gl.bindBuffer(gl.ARRAY_BUFFER,vertexBuffers[whichSet]); // activate that buffer
             gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(inputTriangles[whichSet].glVertices),gl.STATIC_DRAW); // data in
 
-            ambientBuffers[whichSet] = gl.createBuffer();
-            gl.bindBuffer(gl.ARRAY_BUFFER, ambientBuffers[whichSet]);
-            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(inputTriangles[whichSet].gl_ambients),gl.STATIC_DRAW);
-
+            // Send color indeces to webGL. This is our oColor value/diffuse.
             colorBuffers[whichSet] = gl.createBuffer();
             gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffers[whichSet]);
             gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(inputTriangles[whichSet].gl_diffuses),gl.STATIC_DRAW);
 
+            // Ambient buffer
+            ambientBuffers[whichSet] = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, ambientBuffers[whichSet]);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(inputTriangles[whichSet].gl_ambients),gl.STATIC_DRAW);
+
+            // Specular buffer
+
+            
+            // Normal buffer
             normalBuffers[whichSet] = gl.createBuffer(); 
             gl.bindBuffer(gl.ARRAY_BUFFER,normalBuffers[whichSet]); 
             gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(inputTriangles[whichSet].gl_normals),gl.STATIC_DRAW); 
 
-            shininessBuffers[whichSet] = gl.createBuffer();
-            gl.bindBuffer(gl.ARRAY_BUFFER,shininessBuffers[whichSet]); 
-            gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(inputTriangles[whichSet].gl_shineness),gl.STATIC_DRAW); 
+            //shininessBuffers[whichSet] = gl.createBuffer();
+            //gl.bindBuffer(gl.ARRAY_BUFFER,shininessBuffers[whichSet]); 
+            //gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(inputTriangles[whichSet].gl_shineness),gl.STATIC_DRAW); 
          
             // set up the triangle index array, adjusting indices across sets
             inputTriangles[whichSet].glTriangles = []; // flat index list for webgl
@@ -322,63 +350,36 @@ function setupShaders() {
     var fShaderCode = `#version 300 es
         precision highp float;
 
-        in vec3 oNormal;
-        in vec3 oFragPosition;
-        in vec3 oCameraPosition;
-        in vec3 lightPosition;
-        in vec3 ambientOut;
-        in vec4 diffuseOut;
-        in vec3 specularOut;
-        in float outNValue;
-        
-        vec3 lightColor = vec3(1.0, 1.0, 1.0);
-
         out vec4 FragColor;
+
+        in vec4 totalColor;
 
         void main(void) {
 
-            vec3 lightDirection;
-            lightDirection = normalize(lightPosition - oFragPosition);
-            float diffMagnitude = max(dot(oNormal, lightDirection), 0.0);
-            vec3 diffuse = diffMagnitude * lightColor;
-
-            //specular ks * ls (N.H)^n
-            //H = normalized(V+L)
-
-            vec3 nCameraPosition = normalize(oCameraPosition);
-            vec3 H = normalize(nCameraPosition + lightDirection);
-            float NDotH = max(dot(oNormal, H), 0.0);
-
-            float temp = pow(NDotH, outNValue);
-            vec3 specularVal = (specularOut * lightColor) * temp;
-
-
-            vec3 result = (diffuse + ambientOut + specularVal) * diffuseOut.rgb;
-            FragColor = vec4(result, 1.0);
-            //FragColor = oColor;
+            FragColor = totalColor;
         }
     `;
     
     // define vertex shader in essl using es6 template strings
     // have in/out for vertex colors 
     var vShaderCode = `#version 300 es
-        in vec3 vertexColor; //diffuse color here
-        in vec3 vertexPosition; //aPosition we think??!?!
-        in vec3 aNormal;
-        in vec3 ambientLight;
-        in vec3 specularLight;
-        in float nValue;
-        in vec3 oLightPosition;
+        // Variables for position
+        in vec3 vertexPosition; //aPosition 
 
-        out vec4 oColor;
-        out vec3 oNormal;
-        out vec3 oFragPosition;
-        out vec3 oCameraPosition;
-        out vec3 lightPosition;
-        out vec3 ambientOut;
-        out vec4 diffuseOut;
-        out vec3 specularOut;
-        out float outNValue;
+        // Variables for color
+        in vec3 ambientVal;
+        in vec3 oColor; //diffuse color 
+        in vec3 specularVal;
+        uniform vec3 la;
+        uniform vec3 ld;
+        uniform vec3 ls;
+
+        in vec3 aNormal;
+        in float nValue;
+        uniform vec3 oLightPosition;
+
+        vec3 oNormal;
+        vec3 oFragPosition;
 
         uniform mat4 uProjectMatrix;
         uniform mat4 uViewMatrix;
@@ -386,23 +387,49 @@ function setupShaders() {
         uniform vec3 uCameraPosition;
         uniform float uLightIntensity;
 
+        out vec4 totalColor;
+
         void main(void) {
-            lightPosition = oLightPosition;
-
-            
-
-            //gl_Position = uModelMatrix * uViewMatrix * uModelMatrix * vec4(vertexPosition, 1.0);
+            // Position needs to be a vec4 with w as 1.0
+            //gl_Position = uProjectMatrix * uViewMatrix * uModelMatrix * vec4(vertexPosition, 1.0);
             gl_Position = uModelMatrix * vec4(vertexPosition, 1.0);
+
+            // Position of the fragment in world space
             oFragPosition = (uModelMatrix * vec4(aNormal, 1.0)).xyz;
-            ambientOut = ambientLight;
-            diffuseOut = vec4(vertexColor, 1.0);
-            specularOut = specularLight;
-
-            oNormal = (uModelMatrix * vec4(aNormal, 1.0)).xyz;
-
+            //oNormal = (uModelMatrix * vec4(aNormal, 1.0)).xyz;
+            oNormal = aNormal;
             oNormal = normalize(oNormal);
-            outNValue = nValue;
 
+            //oFragPosition = normalize(oFragPosition); Don't worry about this
+            vec3 nCameraPosition = normalize(uCameraPosition);
+
+            // Light direction
+            vec3 nLightPosition = normalize(oLightPosition);
+            vec3 lightDirection = normalize(nLightPosition - oFragPosition);
+
+            // Ambient calculations: Ka * La
+            vec3 ambient = ambientVal * la; 
+
+            // Diffuse calculations: Kd * Ld * (N dot L)
+            vec3 norm = vec3(0.0, 0.0, -1.0);
+            norm = normalize(norm);
+
+            // NdotL is returning 0s for some reason. 
+            //float NdotL = max(dot(oNormal, lightDirection), 0.0);
+            float NdotL = max(dot(oNormal, lightDirection), 1.0);
+            vec3 diffCalc = oColor * ld;
+            vec3 diffuse = diffCalc * NdotL;
+
+            // Specular calculation: Ks * Ls * (N dot H)^n
+            //vec3 V = nCameraPosition - oFragPosition;
+            //vec3 H = normalized(V + lightDirection); //H = normalized(V+L)
+
+            //float NDotH = max(dot(oNormal, H), 0.0);
+            //float spec = pow(max)
+
+            // Pass along the calculated color to the Fragment shader
+            vec3 result = ambient + diffuse;
+            totalColor = vec4(result, 1.0);
         }
     `;
     
@@ -434,22 +461,24 @@ function setupShaders() {
             } else { // no shader program link errors
 
                 gl.useProgram(shaderProgram); // activate shader program (frag and vert)
-                vertexPositionAttrib = // get pointer to vertex shader input
-                    gl.getAttribLocation(shaderProgram, "vertexPosition"); 
+
+                // get pointer to vertex shader input
+                vertexPositionAttrib = gl.getAttribLocation(shaderProgram, "vertexPosition"); 
                 gl.enableVertexAttribArray(vertexPositionAttrib); // input to shader from array
                 
                 // set up vertexColorAttrib from vertexColor
-                vertexColorAttrib = gl.getAttribLocation(shaderProgram, "vertexColor");
+                // Note: vertexColor is our diffuse
+                vertexColorAttrib = gl.getAttribLocation(shaderProgram, "oColor");
                 gl.enableVertexAttribArray(vertexColorAttrib);
 
-                ambientULoc = gl.getAttribLocation(shaderProgram, 'ambientLight');
+                ambientULoc = gl.getAttribLocation(shaderProgram, 'ambientVal');
                 gl.enableVertexAttribArray(ambientULoc);
 
                 normalAttribLoc = gl.getAttribLocation(shaderProgram, 'aNormal');
                 gl.enableVertexAttribArray(normalAttribLoc);
 
-                shininessULoc = gl.getAttribLocation(shaderProgram, 'nValue');
-                gl.enableVertexAttribArray(shininessULoc);
+                //shininessULoc = gl.getAttribLocation(shaderProgram, 'nValue');
+                //gl.enableVertexAttribArray(shininessULoc);
 
                 
                 mMatrixULoc =  gl.getUniformLocation(shaderProgram, 'uModelMatrix');
@@ -457,7 +486,24 @@ function setupShaders() {
                 viewMatrixLoc = gl.getUniformLocation(shaderProgram, 'uViewMatrix');
                 cameraPositionLoc = gl.getUniformLocation(shaderProgram, 'uCameraPosition');
                 lightPositionLoc = gl.getUniformLocation(shaderProgram, 'oLightPosition');
-            
+                laULoc = gl.getUniformLocation(shaderProgram, "la");
+                ldULoc = gl.getUniformLocation(shaderProgram, "ld");
+                lsULoc = gl.getUniformLocation(shaderProgram, "ls");
+
+                /*
+                let nlightPosition = vec3.create();
+                vec3.normalize(nlightPosition, lightPosition);
+
+                let nNormal = vec3.create();
+                let normal = vec3.fromValues(0.0, 0.0, -1.0);
+
+                let oNormal = vec4.fromValues(normal, 1.0) * modelMatrix;
+                vec3.normalize(nNormal, oNormal);
+
+                let calc = vec3.create();
+                let NdotL = Math.max(vec3.dot(nNormal, nlightPosition), 0.0);
+
+                console.log(NdotL);*/
 
                 
 
@@ -499,8 +545,8 @@ function renderModels() {
         gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffers[whichTriSet]);
         gl.vertexAttribPointer(normalAttribLoc,3,gl.FLOAT,false,0,0);
 
-        gl.bindBuffer(gl.ARRAY_BUFFER, shininessBuffers[whichTriSet]);
-        gl.vertexAttribPointer(shininessULoc,3,gl.FLOAT,false,0,0);
+        //gl.bindBuffer(gl.ARRAY_BUFFER, shininessBuffers[whichTriSet]);
+        //gl.vertexAttribPointer(shininessULoc,3,gl.FLOAT,false,0,0);
         
         // triangle buffer: activate and render
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,triangleBuffers[whichTriSet]); // activate
