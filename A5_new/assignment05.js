@@ -52,13 +52,13 @@ function doDrawing(gl, canvas,inputTriangles) {
     
     var state = {
         camera: {
-            position: vec3.fromValues(0.0, 0.0, 3.0),
-            center: vec3.fromValues(0.0, 0.0, 0.0),
+            position: vec3.fromValues(0.5, 0.5, -0.5),
+            center: vec3.fromValues(0.5, 0.5, 0.0),
             up: vec3.fromValues(0.0, 1.0, 0.0),
         },
         lights: [
             {
-                position: vec3.fromValues(0.0, 0.0, 0.0),
+                position: vec3.fromValues(-3.0, 1.0, -0.5),
                 colour: vec3.fromValues(1.0, 1.0, 1.0),
                 strength: 0.5,
             }
@@ -72,16 +72,18 @@ function doDrawing(gl, canvas,inputTriangles) {
         state.objects.push(
             {
                 model: {
-                    position: vec3.fromValues(0.0, 0.0, 0.0),
+                    position: vec3.fromValues(0.0, 0.0, 0.5),
                     rotation: mat4.create(), // Identity matrix
                     scale: vec3.fromValues(1.0, 1.0, 1.0),
                 },
                 programInfo: lightingShader(gl),
                 buffers: undefined,
                 // TODO: Add more object specific state
-                verticesList:inputTriangles[i].vertices,
+                materialList: inputTriangles[i].material,
+                verticesList: inputTriangles[i].vertices,
             }
         );
+
         initBuffers(gl, state.objects[i], inputTriangles[i].vertices.flat(), inputTriangles[i].normals.flat(), inputTriangles[i].triangles.flat());
     }
 
@@ -184,6 +186,12 @@ function drawScene(gl, deltaTime, state) {
             gl.uniform3fv(object.programInfo.uniformLocations.light0Position, state.lights[0].position);
             gl.uniform3fv(object.programInfo.uniformLocations.light0Colour, state.lights[0].colour);
             gl.uniform1f(object.programInfo.uniformLocations.light0Strength, state.lights[0].strength);
+
+            // Update colors
+            gl.uniform3fv(object.programInfo.uniformLocations.ambientValue, object.materialList.ambient);
+            gl.uniform3fv(object.programInfo.uniformLocations.diffuseValue, object.materialList.diffuse);
+            gl.uniform3fv(object.programInfo.uniformLocations.specularValue, object.materialList.specular);
+            gl.uniform1f(object.programInfo.uniformLocations.nValue, object.materialList.n);
 
             // TODO: Add uniform updates here
 
@@ -347,6 +355,50 @@ function setupKeypresses(state){
             }
             break;
         // TODO: Add additional keypress actions
+        case "KeyN":
+            // increment the specular integer exponent by 1 (wrap from 20 to 0)
+            let index;
+
+            // This will change the n value for all 3 objects at the same time
+            /*
+            state.objects.forEach((object) => {
+                if (object.materialList.n < 20){
+                    object.materialList.n++;
+                    console.log(object.materialList.n);
+                }
+                else if (object.materialList.n == 20) {
+                    object.materialList.n = 0;
+                    console.log(object.materialList.n);
+                }
+            });*/
+
+            // Changing the n values of the selected object
+            if (state.objects[state.selectedIndex].materialList.n >= 0 && state.objects[state.selectedIndex].materialList.n < 20){
+                state.objects[state.selectedIndex].materialList.n++;
+            }
+            else if(state.objects[state.selectedIndex].materialList.n == 20){
+                state.objects[state.selectedIndex].materialList.n = 0;
+            }
+            break;
+        case "Digit1":
+            let addVector = vec3.fromValues(0.1, 0.1, 0.1);
+            console.log("hello");
+            console.log(state.objects[state.selectedIndex].materialList.ambient);
+
+            if (state.objects[state.selectedIndex].materialList.ambient >= 0.0 && state.objects[state.selectedIndex].materialList.ambient < 1.0){
+                //state.objects[state.selectedIndex].materialList.ambient += 0.1;
+                vec3.add(state.objects[state.selectedIndex].materialList.ambient, state.objects[state.selectedIndex].materialList.ambient, addVector);
+                console.log(state.objects[state.selectedIndex].materialList.ambient);
+            }
+            else if (state.objects[state.selectedIndex].materialList.ambient == 1.0){
+                state.objects[state.selectedIndex].materialList.ambient = vec3.fromValues(0.0, 0.0, 0.0);
+                console.log(state.objects[state.selectedIndex].materialList.ambient);
+            }
+            break;
+        case "Key2":
+            break;
+        case "Key3":
+            break;
         default:
             break;
         }
@@ -393,6 +445,7 @@ function lightingShader(gl){
     precision highp float;
 
     out vec4 fragColor;
+    
     in vec3 oNormal;
     in vec3 oFragPosition;
     in vec3 oCameraPosition;
@@ -400,6 +453,10 @@ function lightingShader(gl){
     uniform vec3 uLight0Position;
     uniform vec3 uLight0Colour;
     uniform float uLight0Strength;
+    uniform vec3 ambientVal;
+    uniform vec3 diffuseVal;
+    uniform vec3 specularVal;
+    uniform float nVal;
 
     void main() {
         // Get the dirction of the light relative to the object
@@ -409,17 +466,23 @@ function lightingShader(gl){
         // Make use of the uniform light variables
         // To get colours from the materials of the objects, you will need to create your own uniforms
 
-        // Diffuse lighting
-        vec3 diffuse = vec3(0.0, 0.0, 0.0);
-        vec3 diffuseColor = vec3(1.0, 1.0, 1.0);
+        // Ambient
+        vec3 ambient = ambientVal * uLight0Colour;
+
+        // Diffuse lighting: Kd * Ld * (N dot L)
+        float NdotL = max(dot(oNormal, lightDirection), 1.0);
+        vec3 diffuse = (diffuseVal * uLight0Colour) * NdotL;
 
         // Specular lighting
-        vec3 specular = vec3(0.0, 0.0, 0.0);
-        vec3 specularColor = vec3(1.0, 1.0, 1.0);
+        vec3 nCameraPosition = normalize(oCameraPosition); // Normalize the camera position
+        vec3 V = nCameraPosition - oFragPosition;
+        vec3 H = normalize(V + lightDirection); // H = V + L normalized
 
-        vec3 ambientColor = vec3(0.0, 0.0, 0.0);
+        float NDotH = max(dot(oNormal, H), 0.0);
+        float NHPow = pow(NDotH, nVal); // (N dot H)^n
+        vec3 specular = (specularVal * uLight0Colour) * NHPow;
 
-        fragColor = vec4(( specular * specularColor + diffuse * diffuseColor + ambientColor), 1.0);
+        fragColor = vec4((ambient + diffuse + specular), 1.0);
     }
     `;
 
@@ -445,6 +508,10 @@ function lightingShader(gl){
             light0Colour: gl.getUniformLocation(shaderProgram, 'uLight0Colour'),
             light0Strength: gl.getUniformLocation(shaderProgram, 'uLight0Strength'),
             // TODO: Add additional uniforms here
+            ambientValue: gl.getUniformLocation(shaderProgram, "ambientVal"),
+            diffuseValue: gl.getUniformLocation(shaderProgram, "diffuseVal"),
+            specularValue: gl.getUniformLocation(shaderProgram, "specularVal"),
+            nValue: gl.getUniformLocation(shaderProgram, "nVal"),
         },
     };
 
@@ -458,7 +525,10 @@ function lightingShader(gl){
         programInfo.uniformLocations.light0Position === -1 ||
         programInfo.uniformLocations.light0Colour === -1 ||
         programInfo.uniformLocations.light0Strength === -1 ||
-        programInfo.uniformLocations.cameraPosition === -1) {
+        programInfo.uniformLocations.cameraPosition === -1 ||
+        programInfo.uniformLocations.ambientValue === -1 ||
+        programInfo.uniformLocations.diffuseValue === -1 ||
+        programInfo.uniformLocations.specularValue === -1) {
         printError('Shader Location Error', 'One or more of the uniform and attribute variables in the shaders could not be located');
     }
 
