@@ -299,24 +299,32 @@ function setupKeypresses(state){
 
             break;
         case "ArrowLeft":
-            // TODO: Cycle selected object
-            state.selectedIndex++;
+            // Decreases object selected index value
 
-            if (state.selectedIndex < state.objects.length){
-                state.selectedIndex++;
+            if (state.selectedIndex > 0){
+                state.selectedIndex--;
+                console.log(state.selectedIndex);
+            }
+            else if (state.selectedIndex == 0){
+                state.selectedIndex = state.objects.length - 1;
+                console.log(state.selectedIndex);
             }
             else{
-                state.selectedIndex = 0;
+                state.selectedIndex--;
+                console.log(state.selectedIndex);
             }
 
             break;
         case "ArrowRight":
-            // TODO: Cycle selected object
-            if (state.selectedIndex > 0){
-                state.selectedIndex--;
+            // Increases object selected index value
+
+            if (state.selectedIndex < state.objects.length - 1){
+                state.selectedIndex++;
+                console.log(state.selectedIndex);
             }
             else{
                 state.selectedIndex = 0;
+                console.log(state.selectedIndex);
             }
             break;
         case "KeyK":
@@ -354,24 +362,8 @@ function setupKeypresses(state){
                 vec3.add(object.model.position,object.model.position, vec3.fromValues(0.1, 0.0, 0.0));
             }
             break;
-        // TODO: Add additional keypress actions
         case "KeyN":
             // increment the specular integer exponent by 1 (wrap from 20 to 0)
-            let index;
-
-            // This will change the n value for all 3 objects at the same time
-            /*
-            state.objects.forEach((object) => {
-                if (object.materialList.n < 20){
-                    object.materialList.n++;
-                    console.log(object.materialList.n);
-                }
-                else if (object.materialList.n == 20) {
-                    object.materialList.n = 0;
-                    console.log(object.materialList.n);
-                }
-            });*/
-
             // Changing the n values of the selected object
             if (state.objects[state.selectedIndex].materialList.n >= 0 && state.objects[state.selectedIndex].materialList.n < 20){
                 state.objects[state.selectedIndex].materialList.n++;
@@ -381,23 +373,37 @@ function setupKeypresses(state){
             }
             break;
         case "Digit1":
-            let addVector = vec3.fromValues(0.1, 0.1, 0.1);
-            console.log("hello");
-            console.log(state.objects[state.selectedIndex].materialList.ambient);
 
-            if (state.objects[state.selectedIndex].materialList.ambient >= 0.0 && state.objects[state.selectedIndex].materialList.ambient < 1.0){
-                //state.objects[state.selectedIndex].materialList.ambient += 0.1;
-                vec3.add(state.objects[state.selectedIndex].materialList.ambient, state.objects[state.selectedIndex].materialList.ambient, addVector);
-                console.log(state.objects[state.selectedIndex].materialList.ambient);
+            for (var i = 0; i < 3; i++){
+                if (state.objects[state.selectedIndex].materialList.ambient[i] >= 0.0 && state.objects[state.selectedIndex].materialList.ambient[i] < 1.0){
+                    state.objects[state.selectedIndex].materialList.ambient[i] += 0.1;
+                }
+                else if (state.objects[state.selectedIndex].materialList.ambient[i] > 1.0 || state.objects[state.selectedIndex].materialList.ambient[i] == 1.0){
+                    state.objects[state.selectedIndex].materialList.ambient[i] = 0.0;
+                }
             }
-            else if (state.objects[state.selectedIndex].materialList.ambient == 1.0){
-                state.objects[state.selectedIndex].materialList.ambient = vec3.fromValues(0.0, 0.0, 0.0);
-                console.log(state.objects[state.selectedIndex].materialList.ambient);
+
+            break;
+        case "Digit2":
+            for (var i = 0; i < 3; i++){
+                if (state.objects[state.selectedIndex].materialList.diffuse[i] >= 0.0 && state.objects[state.selectedIndex].materialList.diffuse[i] < 1.0){
+                    state.objects[state.selectedIndex].materialList.diffuse[i] += 0.1;
+                }
+                else if (state.objects[state.selectedIndex].materialList.diffuse[i] > 1.0 || state.objects[state.selectedIndex].materialList.diffuse[i] == 1.0){
+                    state.objects[state.selectedIndex].materialList.diffuse[i] = 0.0;
+                }
             }
+
             break;
-        case "Key2":
-            break;
-        case "Key3":
+        case "Digit3":
+            for (var i = 0; i < 3; i++){
+                if (state.objects[state.selectedIndex].materialList.specular[i] >= 0.0 && state.objects[state.selectedIndex].materialList.specular[i] < 1.0){
+                    state.objects[state.selectedIndex].materialList.specular[i] += 0.1;
+                }
+                else if (state.objects[state.selectedIndex].materialList.specular[i] > 1.0 || state.objects[state.selectedIndex].materialList.specular[i] == 1.0){
+                    state.objects[state.selectedIndex].materialList.specular[i] = 0.0;
+                }
+            }
             break;
         default:
             break;
