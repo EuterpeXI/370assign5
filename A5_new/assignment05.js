@@ -4,7 +4,6 @@ main();
  * MAIN
  ************************************/
 
-var hasSelected = false;
 
 function main() {
 
@@ -15,7 +14,7 @@ function main() {
 
     // Initialize the WebGL2 context
     var gl = canvas.getContext("webgl2");
- 
+
     // Only continue if WebGL2 is available and working
     if (gl === null) {
         printError('WebGL 2 not supported by your browser',
@@ -27,13 +26,13 @@ function main() {
     const fileUploadButton = document.querySelector("#fileUploadButton");
     fileUploadButton.addEventListener("click", () => {
         console.log("Submitting file...");
-        let fileInput  = document.getElementById('inputFile');
+        let fileInput = document.getElementById('inputFile');
         let files = fileInput.files;
         let url = URL.createObjectURL(files[0]);
 
         fetch(url, {
             mode: 'no-cors' // 'cors' by default
-        }).then(res=>{
+        }).then(res => {
             return res.text();
         }).then(data => {
             var inputTriangles = JSON.parse(data);
@@ -47,9 +46,9 @@ function main() {
     });
 }
 
-function doDrawing(gl, canvas,inputTriangles) {
+function doDrawing(gl, canvas, inputTriangles) {
     // Create a state for our scene
-    
+
     var state = {
         camera: {
             position: vec3.fromValues(0.5, 0.5, -0.5),
@@ -66,9 +65,10 @@ function doDrawing(gl, canvas,inputTriangles) {
         objects: [],
         canvas: canvas,
         selectedIndex: 0,
+        hasSelected: false,
     };
 
-    for(var i = 0; i < inputTriangles.length; i++) {
+    for (var i = 0; i < inputTriangles.length; i++) {
         state.objects.push(
             {
                 model: {
@@ -88,11 +88,11 @@ function doDrawing(gl, canvas,inputTriangles) {
     }
 
     setupKeypresses(state);
-    
+
     //console.log(state)
 
     console.log("Starting rendering loop");
-    startRendering(gl, state,);
+    startRendering(gl, state);
 }
 
 
@@ -150,7 +150,7 @@ function drawScene(gl, deltaTime, state) {
         // Choose to use our shader
         gl.useProgram(object.programInfo.program);
 
-            // Update uniforms
+        // Update uniforms
         {
             var projectionMatrix = mat4.create();
             var fovy = 60.0 * Math.PI / 180.0; // Vertical field of view in radians
@@ -161,7 +161,7 @@ function drawScene(gl, deltaTime, state) {
             mat4.perspective(projectionMatrix, fovy, aspect, near, far);
 
             gl.uniformMatrix4fv(object.programInfo.uniformLocations.projection, false, projectionMatrix);
-        
+
             var viewMatrix = mat4.create();
             mat4.lookAt(
                 viewMatrix,
@@ -177,8 +177,11 @@ function drawScene(gl, deltaTime, state) {
             mat4.translate(modelMatrix, modelMatrix, object.model.position);
             mat4.mul(modelMatrix, modelMatrix, object.model.rotation);
             mat4.scale(modelMatrix, modelMatrix, object.model.scale);
+
+            //vec3.scale(state.objects[state.selectedIndex].model.scale, state.objects[state.selectedIndex].model.scale, scaleVal);
+
             gl.uniformMatrix4fv(object.programInfo.uniformLocations.model, false, modelMatrix);
-        
+
             // Update camera position
             gl.uniform3fv(object.programInfo.uniformLocations.cameraPosition, state.camera.position);
 
@@ -194,15 +197,6 @@ function drawScene(gl, deltaTime, state) {
             gl.uniform1f(object.programInfo.uniformLocations.nValue, object.materialList.n);
 
             // TODO: Add uniform updates here
-
-            if (hasSelected === true){
-                //console.log("here");
-                hasSelected = true;
-                let val = vec3.fromValues(1.0,1.0,1.0);
-                mat4.multiplyScalar(val, val, 1.2);
-                state.objects[state.selectedIndex].model.scale = val;
-                
-            }
 
 
         }
@@ -225,188 +219,299 @@ function drawScene(gl, deltaTime, state) {
  * UI EVENTS
  ************************************/
 
-function setupKeypresses(state){
+function setupKeypresses(state) {
     document.addEventListener("keydown", (event) => {
         //console.log(event.code);
 
         //console.log(state.hasSelected);
         var object = state.objects[state.selectedIndex];
 
-        switch(event.code) {
-        case "KeyA":
-            if (event.getModifierState("Shift")) {
-                // TODO: Rotate camera about Y axis
+        switch (event.code) {
+            case "KeyA":
+                if (event.getModifierState("Shift")) {
+                    // TODO: Rotate camera about Y axis
 
-                vec3.add(state.camera.center,state.camera.center, vec3.fromValues(0.1, 0.0, 0.0));
-            } else {
-                // TODO: Move camera along X axis
-                /*
-                for (let i=0; i < state.objects.length; i++){
-                    vec3.add(state.objects[i].model.position,state.objects[i].model.position, vec3.fromValues(-0.1, 0.0, 0.0));
-                }*/
-                vec3.add(state.camera.center,state.camera.center, vec3.fromValues(0.1, 0.0, 0.0));
-                vec3.add(state.camera.position, state.camera.position, vec3.fromValues(0.1, 0.0, 0.0));
+                    vec3.add(state.camera.center, state.camera.center, vec3.fromValues(0.1, 0.0, 0.0));
+                } else {
+                    // TODO: Move camera along X axis
+                    vec3.add(state.camera.center, state.camera.center, vec3.fromValues(0.1, 0.0, 0.0));
+                    vec3.add(state.camera.position, state.camera.position, vec3.fromValues(0.1, 0.0, 0.0));
 
-            }
-            break;
-        case "KeyD":
-            if (event.getModifierState("Shift")) {
-                // TODO: Rotate camera about Y axis
-                vec3.add(state.camera.center,state.camera.center, vec3.fromValues(-0.1, 0.0, 0.0));
-            } else {
-                // TODO: Move camera along X axis
-                vec3.add(state.camera.center, state.camera.center, vec3.fromValues(-0.1, 0.0, 0.0));
-                vec3.add(state.camera.position, state.camera.position, vec3.fromValues(-0.1, 0.0, 0.0));
+                }
+                break;
+            case "KeyD":
+                if (event.getModifierState("Shift")) {
+                    // TODO: Rotate camera about Y axis
+                    vec3.add(state.camera.center, state.camera.center, vec3.fromValues(-0.1, 0.0, 0.0));
+                } else {
+                    // TODO: Move camera along X axis
+                    vec3.add(state.camera.center, state.camera.center, vec3.fromValues(-0.1, 0.0, 0.0));
+                    vec3.add(state.camera.position, state.camera.position, vec3.fromValues(-0.1, 0.0, 0.0));
 
-            }
-            break;
-        case "KeyW":
-            if (event.getModifierState("Shift")) {
-                // TODO: Rotate camera about X axis
-            } else {
-                // TODO: Move camera along Z axis
-                vec3.add(state.camera.center,state.camera.center, vec3.fromValues(0.0, 0.0, -0.1));
-                vec3.add(state.camera.position, state.camera.position, vec3.fromValues(0.0, 0.0, -0.1));
-            }
-            break;
-        case "KeyS":
-            if (event.getModifierState("Shift")) {
-                // TODO: Rotate camera about X axis
-            } else {
-                // TODO: Move camera along Z axis
-                vec3.add(state.camera.center,state.camera.center, vec3.fromValues(0.0, 0.0, 0.1));
-                vec3.add(state.camera.position, state.camera.position, vec3.fromValues(0.0, 0.0, 0.1));
-            }
-            break;
-        case "KeyQ":
+                }
+                break;
+            case "KeyW":
+                if (event.getModifierState("Shift")) {
+                    // TODO: Rotate camera about X axis
+                    vec3.add(state.camera.center, state.camera.center, vec3.fromValues(0.0, 0.1, 0.0));
+                } else {
+                    // TODO: Move camera along Z axis
+                    vec3.add(state.camera.center, state.camera.center, vec3.fromValues(0.0, 0.0, -0.1));
+                    vec3.add(state.camera.position, state.camera.position, vec3.fromValues(0.0, 0.0, -0.1));
+                }
+                break;
+            case "KeyS":
+                if (event.getModifierState("Shift")) {
+                    // TODO: Rotate camera about X axis
+                    vec3.add(state.camera.center, state.camera.center, vec3.fromValues(0.0, -0.1, 0.0));
+                } else {
+                    // TODO: Move camera along Z axis
+                    vec3.add(state.camera.center, state.camera.center, vec3.fromValues(0.0, 0.0, 0.1));
+                    vec3.add(state.camera.position, state.camera.position, vec3.fromValues(0.0, 0.0, 0.1));
+                }
+                break;
+            case "KeyQ":
                 // TODO: Move camera along Y axis
-                vec3.add(state.camera.center,state.camera.center, vec3.fromValues(0.0, -0.1, 0.0));
+                vec3.add(state.camera.center, state.camera.center, vec3.fromValues(0.0, -0.1, 0.0));
                 vec3.add(state.camera.position, state.camera.position, vec3.fromValues(0.0, -0.1, 0.0));
-            break;
-        case "KeyE":
+                break;
+            case "KeyE":
                 // TODO: Move camera along Y axis
-                vec3.add(state.camera.center,state.camera.center, vec3.fromValues(0.0, 0.1, 0.0));
+                vec3.add(state.camera.center, state.camera.center, vec3.fromValues(0.0, 0.1, 0.0));
                 vec3.add(state.camera.position, state.camera.position, vec3.fromValues(0.0, 0.1, 0.0));
-            break;
-        case "Space":
-            // TODO: Highlight
+                break;
+            case "Space":
+                // TODO: Highlight
+                if (!state.hasSelected) {
+                    state.hasSelected = true;
+                    vec3.scale(object.model.scale, object.model.scale, 1.2);
 
-            //console.log(state.objects[state.selectedIndex].model.scale);
-            //mat4.multiplyScalar(state.objects[state.selectedIndex].model.scale, state.objects[state.selectedIndex].model.scale, 1.2);
-            //state.selected = object;
-            hasSelected = !hasSelected;
-            
-
-            break;
-        case "ArrowLeft":
-            // Decreases object selected index value
-
-            if (state.selectedIndex > 0){
-                state.selectedIndex--;
-                console.log(state.selectedIndex);
-            }
-            else if (state.selectedIndex == 0){
-                state.selectedIndex = state.objects.length - 1;
-                console.log(state.selectedIndex);
-            }
-            else{
-                state.selectedIndex--;
-                console.log(state.selectedIndex);
-            }
-
-            break;
-        case "ArrowRight":
-            // Increases object selected index value
-
-            if (state.selectedIndex < state.objects.length - 1){
-                state.selectedIndex++;
-                console.log(state.selectedIndex);
-            }
-            else{
-                state.selectedIndex = 0;
-                console.log(state.selectedIndex);
-            }
-            break;
-        case "KeyK":
-            if (event.getModifierState("Shift")) {
-                // TODO: Rotate selected object about Y axis
-                console.log(object);
-                let tempLoc = object.model.position;
-                vec3.add(object.model.position,object.model.position, vec3.fromValues(0.0, 0.0, -object.verticesList[0][2]));
-
-                console.log(object.verticesList[0]);
-                
-                let tempVal = 2 * object.verticesList[0][2];
-                console.log(tempVal);
-
-                mat4.rotateY(object.model.rotation, object.model.rotation, -3.14159);
-                vec3.add(object.model.position,object.model.position, vec3.fromValues(0.0, 0.0, object.verticesList[0][2]));
-                //object.model.position = vec3.fromValues(-object.verticesList[0], -object.verticesList[1], -object.verticesList[2]);
-                //object.model.position = tempLoc;
-                
-
-            } else {
-                // TODO: Translate selected object about X axis
-                vec3.add(object.model.position,object.model.position, vec3.fromValues(-0.1, 0.0, 0.0));
-
-            }
-            break;
-        case "Semicolon":
-            if (event.getModifierState("Shift")) {
-                // TODO: Rotate selected object about Y axis
-                //mat4.rotateY(object.model.rotation, object.model.rotation, 0.2);
-
-
-            } else {
-                // TODO: Translate selected object about X axis
-                vec3.add(object.model.position,object.model.position, vec3.fromValues(0.1, 0.0, 0.0));
-            }
-            break;
-        case "KeyN":
-            // increment the specular integer exponent by 1 (wrap from 20 to 0)
-            // Changing the n values of the selected object
-            if (state.objects[state.selectedIndex].materialList.n >= 0 && state.objects[state.selectedIndex].materialList.n < 20){
-                state.objects[state.selectedIndex].materialList.n++;
-            }
-            else if(state.objects[state.selectedIndex].materialList.n == 20){
-                state.objects[state.selectedIndex].materialList.n = 0;
-            }
-            break;
-        case "Digit1":
-
-            for (var i = 0; i < 3; i++){
-                if (state.objects[state.selectedIndex].materialList.ambient[i] >= 0.0 && state.objects[state.selectedIndex].materialList.ambient[i] < 1.0){
-                    state.objects[state.selectedIndex].materialList.ambient[i] += 0.1;
                 }
-                else if (state.objects[state.selectedIndex].materialList.ambient[i] > 1.0 || state.objects[state.selectedIndex].materialList.ambient[i] == 1.0){
-                    state.objects[state.selectedIndex].materialList.ambient[i] = 0.0;
+                else {
+                    state.hasSelected = false;
+                    vec3.scale(object.model.scale, object.model.scale, 0.85);
                 }
-            }
 
-            break;
-        case "Digit2":
-            for (var i = 0; i < 3; i++){
-                if (state.objects[state.selectedIndex].materialList.diffuse[i] >= 0.0 && state.objects[state.selectedIndex].materialList.diffuse[i] < 1.0){
-                    state.objects[state.selectedIndex].materialList.diffuse[i] += 0.1;
-                }
-                else if (state.objects[state.selectedIndex].materialList.diffuse[i] > 1.0 || state.objects[state.selectedIndex].materialList.diffuse[i] == 1.0){
-                    state.objects[state.selectedIndex].materialList.diffuse[i] = 0.0;
-                }
-            }
+                break;
+            case "ArrowLeft":
+                // Decreases object selected index value
 
-            break;
-        case "Digit3":
-            for (var i = 0; i < 3; i++){
-                if (state.objects[state.selectedIndex].materialList.specular[i] >= 0.0 && state.objects[state.selectedIndex].materialList.specular[i] < 1.0){
-                    state.objects[state.selectedIndex].materialList.specular[i] += 0.1;
+                if (state.hasSelected) {
+                    if (state.selectedIndex > 0) {
+                        vec3.scale(object.model.scale, object.model.scale, 0.85);
+                        state.selectedIndex--;
+                        vec3.scale(state.objects[state.selectedIndex].model.scale, state.objects[state.selectedIndex].model.scale, 1.2);
+                        console.log(state.selectedIndex);
+                    }
+                    else if (state.selectedIndex == 0) {
+                        vec3.scale(object.model.scale, object.model.scale, 0.85);
+                        state.selectedIndex = state.objects.length - 1;
+                        vec3.scale(state.objects[state.selectedIndex].model.scale, state.objects[state.selectedIndex].model.scale, 1.2);
+                        console.log(state.selectedIndex);
+                    }
+                    else {
+                        vec3.scale(object.model.scale, object.model.scale, 0.85);
+                        state.selectedIndex--;
+                        vec3.scale(state.objects[state.selectedIndex].model.scale, state.objects[state.selectedIndex].model.scale, 1.2);
+                        console.log(state.selectedIndex);
+                    }
+
                 }
-                else if (state.objects[state.selectedIndex].materialList.specular[i] > 1.0 || state.objects[state.selectedIndex].materialList.specular[i] == 1.0){
-                    state.objects[state.selectedIndex].materialList.specular[i] = 0.0;
+
+
+                break;
+            case "ArrowRight":
+                // Increases object selected index value
+
+                if (state.hasSelected) {
+                    if (state.selectedIndex < state.objects.length - 1) {
+                        vec3.scale(object.model.scale, object.model.scale, 0.85);
+                        state.selectedIndex++;
+                        vec3.scale(state.objects[state.selectedIndex].model.scale, state.objects[state.selectedIndex].model.scale, 1.2);
+                        console.log(state.selectedIndex);
+                    }
+                    else {
+                        vec3.scale(object.model.scale, object.model.scale, 0.85);
+                        state.selectedIndex = 0;
+                        vec3.scale(state.objects[state.selectedIndex].model.scale, state.objects[state.selectedIndex].model.scale, 1.2);
+                        console.log(state.selectedIndex);
+                    }
                 }
-            }
-            break;
-        default:
-            break;
+
+
+                break;
+            case "KeyK":
+                if (event.getModifierState("Shift")) {
+                    // TODO: Rotate selected object about Y axis
+
+                    if (state.hasSelected) {
+                        mat4.rotateY(object.model.rotation, object.model.rotation, -0.3);
+                    }
+
+
+                } else {
+                    // TODO: Translate selected object about X axis
+                    if (state.hasSelected) {
+                        vec3.add(object.model.position, object.model.position, vec3.fromValues(-0.1, 0.0, 0.0));
+                    }
+
+
+                }
+                break;
+            case "Semicolon":
+                if (event.getModifierState("Shift")) {
+                    // TODO: Rotate selected object about Y axis
+                    if (state.hasSelected) {
+                        mat4.rotateY(object.model.rotation, object.model.rotation, 0.3);
+                    }
+
+
+                } else {
+                    // TODO: Translate selected object about X axis
+                    if (state.hasSelected) {
+                        vec3.add(object.model.position, object.model.position, vec3.fromValues(0.1, 0.0, 0.0));
+                    }
+
+                }
+                break;
+
+            //o and l
+
+            case "KeyO":
+                if (event.getModifierState("Shift")) {
+                    // TODO: Rotate selected object about Y axis
+
+                    if (state.hasSelected) {
+                        mat4.rotateX(object.model.rotation, object.model.rotation, -0.3);
+                    }
+
+
+                } else {
+                    // TODO: Translate selected object about X axis
+                    if (state.hasSelected) {
+                        vec3.add(object.model.position, object.model.position, vec3.fromValues(0.0, 0.0, -0.1));
+                    }
+
+
+                }
+                break;
+            case "KeyL":
+                if (event.getModifierState("Shift")) {
+                    // TODO: Rotate selected object about Y axis
+                    if (state.hasSelected) {
+                        mat4.rotateX(object.model.rotation, object.model.rotation, 0.3);
+                    }
+
+
+                } else {
+                    // TODO: Translate selected object about X axis
+                    if (state.hasSelected) {
+                        vec3.add(object.model.position, object.model.position, vec3.fromValues(0.0, 0.0, 0.1));
+                    }
+
+                }
+                break;
+
+
+            case "KeyI":
+                if (event.getModifierState("Shift")) {
+                    // TODO: Rotate selected object about Y axis
+
+                    if (state.hasSelected) {
+                        mat4.rotateZ(object.model.rotation, object.model.rotation, -0.3);
+                    }
+
+
+                } else {
+                    // TODO: Translate selected object about X axis
+                    if (state.hasSelected) {
+                        vec3.add(object.model.position, object.model.position, vec3.fromValues(0.0, -0.1, 0.0));
+                    }
+
+
+                }
+                break;
+            case "KeyP":
+                if (event.getModifierState("Shift")) {
+                    // TODO: Rotate selected object about Y axis
+                    if (state.hasSelected) {
+                        mat4.rotateZ(object.model.rotation, object.model.rotation, 0.3);
+                    }
+
+
+                } else {
+                    // TODO: Translate selected object about X axis
+                    if (state.hasSelected) {
+                        vec3.add(object.model.position, object.model.position, vec3.fromValues(0.0, 0.1, 0.0));
+                    }
+
+                }
+                break;
+
+            case "KeyN":
+                // increment the specular integer exponent by 1 (wrap from 20 to 0)
+                // Changing the n values of the selected object
+
+                if (state.hasSelected) {
+                    if (state.objects[state.selectedIndex].materialList.n >= 0 && state.objects[state.selectedIndex].materialList.n < 20) {
+                        state.objects[state.selectedIndex].materialList.n++;
+                    }
+                    else if (state.objects[state.selectedIndex].materialList.n == 20) {
+                        state.objects[state.selectedIndex].materialList.n = 0;
+                    }
+                }
+
+
+                break;
+            case "Digit1":
+
+                if (state.hasSelected) {
+
+                    for (var i = 0; i < 3; i++) {
+                        if (state.objects[state.selectedIndex].materialList.ambient[i] >= 0.0 && state.objects[state.selectedIndex].materialList.ambient[i] < 1.0) {
+                            state.objects[state.selectedIndex].materialList.ambient[i] += 0.1;
+                        }
+                        else if (state.objects[state.selectedIndex].materialList.ambient[i] > 1.0 || state.objects[state.selectedIndex].materialList.ambient[i] == 1.0) {
+                            state.objects[state.selectedIndex].materialList.ambient[i] = 0.0;
+                        }
+                    }
+                }
+
+
+                break;
+            case "Digit2":
+
+                if (state.hasSelected) {
+
+                    for (var i = 0; i < 3; i++) {
+                        if (state.objects[state.selectedIndex].materialList.diffuse[i] >= 0.0 && state.objects[state.selectedIndex].materialList.diffuse[i] < 1.0) {
+                            state.objects[state.selectedIndex].materialList.diffuse[i] += 0.1;
+                        }
+                        else if (state.objects[state.selectedIndex].materialList.diffuse[i] > 1.0 || state.objects[state.selectedIndex].materialList.diffuse[i] == 1.0) {
+                            state.objects[state.selectedIndex].materialList.diffuse[i] = 0.0;
+                        }
+                    }
+                }
+
+
+                break;
+            case "Digit3":
+
+                if (state.hasSelected) {
+                    for (var i = 0; i < 3; i++) {
+                        if (state.objects[state.selectedIndex].materialList.specular[i] >= 0.0 && state.objects[state.selectedIndex].materialList.specular[i] < 1.0) {
+                            state.objects[state.selectedIndex].materialList.specular[i] += 0.1;
+                        }
+                        else if (state.objects[state.selectedIndex].materialList.specular[i] > 1.0 || state.objects[state.selectedIndex].materialList.specular[i] == 1.0) {
+                            state.objects[state.selectedIndex].materialList.specular[i] = 0.0;
+                        }
+                    }
+                }
+
+
+                break;
+            default:
+                break;
         }
     });
 
@@ -416,10 +521,10 @@ function setupKeypresses(state){
 /************************************
  * SHADER SETUP
  ************************************/
-function lightingShader(gl){
-// Vertex shader source code
+function lightingShader(gl) {
+    // Vertex shader source code
     const vsSource =
-    `#version 300 es
+        `#version 300 es
     in vec3 aPosition;
     in vec3 aNormal;
 
@@ -447,7 +552,7 @@ function lightingShader(gl){
 
     // Fragment shader source code
     const fsSource =
-    `#version 300 es
+        `#version 300 es
     precision highp float;
 
     out vec4 fragColor;
@@ -521,7 +626,7 @@ function lightingShader(gl){
         },
     };
 
-       // Check to see if we found the locations of our uniforms and attributes
+    // Check to see if we found the locations of our uniforms and attributes
     // Typos are a common source of failure
     if (programInfo.attribLocations.vertexPosition === -1 ||
         programInfo.attribLocations.vertexNormal === -1 ||
